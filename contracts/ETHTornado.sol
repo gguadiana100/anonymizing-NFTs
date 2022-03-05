@@ -19,11 +19,28 @@ contract ETHTornado is Tornado {
     IVerifier _verifier,
     IHasher _hasher,
     uint256 _denomination,
-    uint32 _merkleTreeHeight
-  ) Tornado(_verifier, _hasher, _denomination, _merkleTreeHeight) {}
+    uint32 _merkleTreeHeight,
+    uint256 _start_range,
+    uint256 _end_range,
+    uint256 _number_of_sales
+  ) Tornado(_verifier, _hasher, _denomination, _merkleTreeHeight,
+    _start_range, _end_range, _number_of_sales) {}
 
-  function _processDeposit() internal override {
-    require(msg.value == denomination, "Please send `mixDenomination` ETH along with transaction");
+  function _processDeposit(uint256 _tokenID) internal override {
+    // require(msg.value == denomination, "Please send `mixDenomination` ETH along with transaction");
+
+    // transfer NFT to this smart contract
+    _transfer(msg.sender, address(this), _tokenID);
+
+    // add tokenID to array and update current deposits count
+    token_IDs[current_deposits] = _tokenID;
+    current_deposits = current_deposits + 1;
+
+  }
+
+  function _processPurchase() internal override {
+    require(msg.value == end_range, "Please send the maximum ETH amount along with transaction");
+    current_purchases = current_purchases + 1;
   }
 
   function _processWithdraw(

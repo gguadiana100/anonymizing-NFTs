@@ -12,11 +12,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.7.0;
 
+import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/access/Ownable.sol";
+
 interface IHasher {
   function MiMCSponge(uint256 in_xL, uint256 in_xR) external pure returns (uint256 xL, uint256 xR);
 }
 
-contract MerkleTreeWithHistory {
+contract MerkleTreeWithHistory is Ownable {
   uint256 public constant FIELD_SIZE = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
   uint256 public constant ZERO_VALUE = 21663839004416932945382355908790599225266501822907911457504978515578255421292; // = keccak256("tornado") % FIELD_SIZE
   IHasher public immutable hasher;
@@ -65,7 +67,7 @@ contract MerkleTreeWithHistory {
     return bytes32(R);
   }
 
-  function _insert(bytes32 _leaf) internal returns (uint32 index) {
+  function insert(bytes32 _leaf) onlyOwner returns (uint32 index) {
     uint32 _nextIndex = nextIndex;
     require(_nextIndex != uint32(2)**levels, "Merkle tree is full. No more leaves can be added");
     uint32 currentIndex = _nextIndex;

@@ -16,7 +16,6 @@ import "./MerkleTreeWithHistory.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import 'https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC721/ERC721.sol';
 
-
 interface IVerifier {
   function verifyProof(bytes memory _proof, uint256[6] memory _input) external returns (bool);
 }
@@ -27,9 +26,11 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
 
   mapping(bytes32 => bool) public nullifierHashes;
   // we store all commitments just to prevent accidental deposits with the same commitment
-  mapping(bytes32 => bool) public commitments;
+  mapping(bytes32 => bool) public deposit_commitments;
+  mapping(bytes32 => bool) public purchase_commitments;
 
   event Deposit(bytes32 indexed commitment, uint32 leafIndex, uint256 timestamp);
+  event Purchase(bytes32 indexed commitment, uint32 leafIndex, uint256 timestamp);
   event Withdrawal(address to, bytes32 nullifierHash, address indexed relayer, uint256 fee);
 
   // Define the phases
@@ -42,6 +43,7 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
   uint256 public number_of_sales;
   Phase public current_phase;
   uint256 public current_deposits;
+  uint256 public current_purchases;
   uint256[] public token_IDs;
   MerkleTreeWithHistory public purchase_merkle_tree;
   MerkleTreeWithHistory public deposit_merkle_tree;
@@ -72,6 +74,7 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
     number_of_sales = _number_of_sales;
     current_phase = Phase.SELLER;
     current_deposits = 0;
+    current_purchases = 0;
     token_IDs = new uint256[](_number_of_sales);
 
     purchase_merkle_tree = new MerkleTreeWithHistory(_merkleTreeHeight, _hasher);
@@ -83,22 +86,21 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
     @param _commitment the note commitment, which is PedersenHash(nullifier + secret)
   */
 
-  function deposit(bytes32 _commitment, uint256 _tokenID) external payable nonReentrant {
-    require(!commitments[_commitment], "The commitment has been submitted");
+  function deposit(bytes32 _commitment, uint256 _tokenID) external nonReentrant {
+    require(!deposit_commitments[_commitment], "The commitment has been submitted");
     require(current_phase == Phase.SELLER, "Cannot deposit outside of seller phase");
+    require(current_deposits >= number_of_sales, "No more deposits are needed");
 
-    uint32 insertedIndex = _insert(_commitment);
-    commitments[_commitment] = true;
+    uint32 insertedIndex = deposit_merkle_tree.insert(_commitment);
+    deposit_commitments[_commitment] = true;
 
-    // add tokenID to array
-    // token_IDs =
-    _processDeposit();
+    _processDeposit(_tokenID);
 
     emit Deposit(_commitment, insertedIndex, block.timestamp);
   }
 
   /** @dev this function is defined in a child contract */
-  function _processDeposit() internal virtual;
+  function _processDeposit(uint256 _tokenID) internal virtual;
 
   /**
     @dev Withdraw a deposit from the contract. `proof` is a zkSNARK proof data, and input is an array of circuit public inputs
@@ -108,6 +110,21 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
       - the recipient of funds
       - optional fee that goes to the transaction sender (usually a relay)
   */
+  function purchase(bytes32 _commitment, uint256 _tokenID) external payable nonReentrant {
+    require(!purchase_commitments[_commitment], "The commitment has been submitted");
+    require(current_phase == Phase.BUYER, "Cannot deposit outside of buyer phase");
+    require(current_purchases >= number_of_sales, "No more purchases are needed");
+
+    uint32 insertedIndex = purchase_merkle_tree.insert(_commitment);
+    purchase_commitments[_commitment] = true;
+
+    _processPurchase();
+    emit Purchase(_commitment, insertedIndex, block.timestamp);
+  }
+
+  /** @dev this function is defined in a child contract */
+  function _processPurchase() internal virtual;
+
   function withdraw(
     bytes calldata _proof,
     bytes32 _root,
