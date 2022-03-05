@@ -14,12 +14,14 @@ pragma solidity ^0.7.0;
 
 import "./MerkleTreeWithHistory.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import 'https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC721/ERC721.sol';
+
 
 interface IVerifier {
   function verifyProof(bytes memory _proof, uint256[6] memory _input) external returns (bool);
 }
 
-abstract contract Tornado is MerkleTreeWithHistory, ReentrancyGuard {
+abstract contract Tornado is ReentrancyGuard, ERC721{
   IVerifier public immutable verifier;
   uint256 public denomination;
 
@@ -29,6 +31,20 @@ abstract contract Tornado is MerkleTreeWithHistory, ReentrancyGuard {
 
   event Deposit(bytes32 indexed commitment, uint32 leafIndex, uint256 timestamp);
   event Withdrawal(address to, bytes32 nullifierHash, address indexed relayer, uint256 fee);
+
+  // Define the phases
+  enum Phase{SELLER, BUYER, SELLER_PAYMENT, BUYER_WITHDRAWAL_REFUND}
+
+
+  // Additional parameters
+  uint256 public start_range;
+  uint256 public end_range;
+  uint256 public number_of_sales;
+  Phase public current_phase;
+  uint256 public current_deposits;
+  uint256[] public token_IDs;
+  MerkleTreeWithHistory public purchase_merkle_tree;
+  MerkleTreeWithHistory public deposit_merkle_tree;
 
   /**
     @dev The constructor
@@ -41,22 +57,41 @@ abstract contract Tornado is MerkleTreeWithHistory, ReentrancyGuard {
     IVerifier _verifier,
     IHasher _hasher,
     uint256 _denomination,
-    uint32 _merkleTreeHeight
-  ) MerkleTreeWithHistory(_merkleTreeHeight, _hasher) {
+    uint32 _merkleTreeHeight,
+    uint256 _start_range,
+    uint256 _end_range,
+    uint256 _number_of_sales) {
     require(_denomination > 0, "denomination should be greater than 0");
+    require(_start_range > 0, "start range should be greater than 0");
+    require(_end_range > 0, "end range should be greater than 0");
+    require(_number_of_sales > 0, "number of sales should be greater than 0");
     verifier = _verifier;
     denomination = _denomination;
+    start_range = _start_range;
+    end_range = _end_range;
+    number_of_sales = _number_of_sales;
+    current_phase = Phase.SELLER;
+    current_deposits = 0;
+    token_IDs = new uint256[](_number_of_sales);
+
+    purchase_merkle_tree = new MerkleTreeWithHistory(_merkleTreeHeight, _hasher);
+    deposit_merkle_tree = new MerkleTreeWithHistory(_merkleTreeHeight, _hasher);
   }
 
   /**
     @dev Deposit funds into the contract. The caller must send (for ETH) or approve (for ERC20) value equal to or `denomination` of this instance.
     @param _commitment the note commitment, which is PedersenHash(nullifier + secret)
   */
-  function deposit(bytes32 _commitment) external payable nonReentrant {
+
+  function deposit(bytes32 _commitment, uint256 _tokenID) external payable nonReentrant {
     require(!commitments[_commitment], "The commitment has been submitted");
+    require(current_phase == Phase.SELLER, "Cannot deposit outside of seller phase");
 
     uint32 insertedIndex = _insert(_commitment);
     commitments[_commitment] = true;
+
+    // add tokenID to array
+    // token_IDs =
     _processDeposit();
 
     emit Deposit(_commitment, insertedIndex, block.timestamp);
