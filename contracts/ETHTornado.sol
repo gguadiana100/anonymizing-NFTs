@@ -43,6 +43,7 @@ contract ETHTornado is Tornado {
   }
 
   function _processPurchase() internal override {
+    require(current_phase == BUYER);
     require(msg.value == end_range, "Please send the maximum ETH amount along with transaction");
     current_purchases = current_purchases + 1;
 
@@ -67,5 +68,23 @@ contract ETHTornado is Tornado {
       (success, ) = _relayer.call{ value: _fee }("");
       require(success, "payment to _relayer did not go thru");
     }
+  }
+  function _processWithdrawNFT(
+    address payable _recipient,
+    uint256 _tokenID
+  ) internal override {
+    // sanity checks
+    require(msg.value == 0, "Message value is supposed to be zero for ETH instance");
+    require(current_phase == Phase.BUYER_WITHDRAWAL_REFUND);
+    require(current_NFT_withdraws <= _number_of_sales);
+    require(current_refund_withdraws <= _number_of_sales);
+
+    current_NFT_withdraws = current_NFT_withdraws + 1;
+
+    if (current_NFT_withdraws == _number_of_sales && current_refund_withdraws == _number_of_sales) {
+      current_phase == Phase.SELLER;
+    }
+
+
   }
 }

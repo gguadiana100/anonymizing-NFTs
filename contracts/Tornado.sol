@@ -29,9 +29,9 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
   mapping(bytes32 => bool) public deposit_commitments;
   mapping(bytes32 => bool) public purchase_commitments;
 
-  event Deposit(bytes32 indexed commitment, uint32 leafIndex, uint256 timestamp);
+  event Deposit(bytes32 indexed commitment, uint32 leafIndex, uint256 timestamp, uint256 _tokenID);
   event Purchase(bytes32 indexed commitment, uint32 leafIndex, uint256 timestamp);
-  event Withdrawal(address to, bytes32 nullifierHash, address indexed relayer, uint256 fee);
+  event Withdrawal(address to, bytes32 nullifierHash, uint256 _tokenID);
 
   // Define the phases
   enum Phase{SELLER, BUYER, SELLER_PAYMENT, BUYER_WITHDRAWAL_REFUND}
@@ -44,6 +44,9 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
   Phase public current_phase;
   uint256 public current_deposits;
   uint256 public current_purchases;
+  uint256 public current_NFT_withdraws;
+  uint256 public current_refund_withdraws;
+  uint256 public random_index;
   uint256[] public token_IDs;
   MerkleTreeWithHistory public purchase_merkle_tree;
   MerkleTreeWithHistory public deposit_merkle_tree;
@@ -75,10 +78,27 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
     current_phase = Phase.SELLER;
     current_deposits = 0;
     current_purchases = 0;
+    current_NFT_withdraws = 0;
+    current_refund_withdraws = 0;
+    random_index = 0;
     token_IDs = new uint256[](_number_of_sales);
 
     purchase_merkle_tree = new MerkleTreeWithHistory(_merkleTreeHeight, _hasher);
     deposit_merkle_tree = new MerkleTreeWithHistory(_merkleTreeHeight, _hasher);
+  }
+
+
+
+  function get_random_number(uint256 random_index, uint256 s, uint256 e) public view returns (uint256) {
+    uint256 pi = 14159265358979323846
+    uint256 random_looping = pi[random_index % 20]
+    uint256 random_number = 0
+    for (uint256 i = 0; i < random_looping; i++) {
+      random_number = random_number + pi[random_index + i] * 10**i
+    }
+    random_number = random_number % (e-s) + s
+    random_index = random_index + 1
+    return random_number
   }
 
   /**
@@ -96,7 +116,7 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
 
     _processDeposit(_tokenID);
 
-    emit Deposit(_commitment, insertedIndex, block.timestamp);
+    emit Deposit(_commitment, insertedIndex, block.timestamp, _tokenID);
   }
 
   /** @dev this function is defined in a child contract */
@@ -125,18 +145,19 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
   /** @dev this function is defined in a child contract */
   function _processPurchase() internal virtual;
 
-  function withdraw(
+  function withdrawNFT(
     bytes calldata _proof,
     bytes32 _root,
-    bytes32 _nullifierHash,
-    address payable _recipient,
-    address payable _relayer,
-    uint256 _fee,
-    uint256 _refund
+    bytes32 _withdraw_NFT_nullifierHash
+    address payable _recipient
   ) external payable nonReentrant {
-    require(_fee <= denomination, "Fee exceeds transfer value");
-    require(!nullifierHashes[_nullifierHash], "The note has been already spent");
+
+
+    require(!withdraw_NFT_nullifierHashes[_withdraw_NFT_nullifierHash], "The reciept has been already spent");
     require(isKnownRoot(_root), "Cannot find your merkle root"); // Make sure to use a recent one
+    uint256 _relayer = 0;
+    uint256 _fee = 0;
+    uint256 _refund = 0;
     require(
       verifier.verifyProof(
         _proof,
@@ -145,9 +166,21 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
       "Invalid withdraw proof"
     );
 
+    uint256 rand = getRandomNumber();
+    _token = token_IDs[rand];
+    while(!NFT_tokens[_token]) {
+      rand = rand + 1;
+      if (rand == _number_of_sales) {
+        rand = 0;
+      }
+      _token = token_IDs[rand];
+    }
+
+    _transfer(address(this), _recipient, _token);
+
     nullifierHashes[_nullifierHash] = true;
-    _processWithdraw(_recipient, _relayer, _fee, _refund);
-    emit Withdrawal(_recipient, _nullifierHash, _relayer, _fee);
+    _processWithdraw(_recipient, _token);
+    emit Withdrawal(_recipient, _nullifierHash, _token);
   }
 
   /** @dev this function is defined in a child contract */
