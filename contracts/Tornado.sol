@@ -24,11 +24,20 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
   IVerifier public immutable verifier;
   uint256 public denomination;
 
-  mapping(bytes32 => bool) public nullifierHashes;
+  mapping(bytes32 => bool) public seller_nullifierHashes;
+  mapping(bytes32 => bool) public withdraw_NFT_nullifierHashes;
+  mapping(bytes32 => bool) public withdraw_refund_nullifierHashes;
   // we store all commitments just to prevent accidental deposits with the same commitment
   mapping(bytes32 => bool) public deposit_commitments;
   mapping(bytes32 => bool) public purchase_commitments;
 
+  mapping(uint256 => bool) public seller_sales_amounts;
+  mapping(uint256 => bool) public buyer_sales_amounts;
+  mapping(uint256 => bool) public NFT_tokens;
+
+  event Deposit(bytes32 indexed commitment, uint32 leafIndex, uint256 timestamp);
+  event Purchase(bytes32 indexed commitment, uint32 leafIndex, uint256 timestamp);
+  event Payment(address to, bytes32 nullifierHash, address indexed relayer, uint256 fee);
   event Deposit(bytes32 indexed commitment, uint32 leafIndex, uint256 timestamp, uint256 _tokenID);
   event Purchase(bytes32 indexed commitment, uint32 leafIndex, uint256 timestamp);
   event Withdrawal(address to, bytes32 nullifierHash, uint256 _tokenID);
@@ -44,10 +53,12 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
   Phase public current_phase;
   uint256 public current_deposits;
   uint256 public current_purchases;
+  uint256 public current_payments;
   uint256 public current_NFT_withdraws;
   uint256 public current_refund_withdraws;
   uint256 public random_index;
   uint256[] public token_IDs;
+  uint256[] public sale_amounts;
   MerkleTreeWithHistory public purchase_merkle_tree;
   MerkleTreeWithHistory public deposit_merkle_tree;
 
@@ -78,10 +89,12 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
     current_phase = Phase.SELLER;
     current_deposits = 0;
     current_purchases = 0;
+    current_payments = 0;
     current_NFT_withdraws = 0;
     current_refund_withdraws = 0;
     random_index = 0;
     token_IDs = new uint256[](_number_of_sales);
+    sale_amounts = new uint256[](_number_of_sales);
 
     purchase_merkle_tree = new MerkleTreeWithHistory(_merkleTreeHeight, _hasher);
     deposit_merkle_tree = new MerkleTreeWithHistory(_merkleTreeHeight, _hasher);
@@ -144,6 +157,48 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
 
   /** @dev this function is defined in a child contract */
   function _processPurchase() internal virtual;
+
+  uint256 function get_random_number() internal {
+    return 1;
+  }
+
+  uint256 function get_random_sales_amount() internal {
+    uint256 random_index = get_random_number();
+    while(seller_sales_amounts[random_index] != false) {
+      random_index = random_index + 1;
+      if (random_index == number_of_sales) {
+        random_index = 0;
+      }
+    }
+    return sale_amounts[random_index];
+  }
+
+  function payment(
+    bytes calldata _proof,
+    bytes32 _root,
+    bytes32 _nullifierHash,
+    address payable _recipient,
+    address payable _relayer,
+    uint256 _fee,
+    uint256 _refund
+  ) external payable nonReentrant {
+    require
+    uint256 random_sale_amount = get_random_sales_amount();
+    require(_fee <= random_sales_amount, "Fee exceeds maximum transfer value");
+    require(!seller_nullifierHashes[_nullifierHash], "The deposit note has been already spent");
+    require(deposit_merkle_tree.isKnownRoot(_root), "Cannot find your merkle root for deposit merkle tree"); // Make sure to use a recent one
+    require(
+      verifier.verifyProof(
+        _proof,
+        [uint256(_root), uint256(_nullifierHash), uint256(_recipient), uint256(_relayer), _fee, _refund]
+      ),
+      "Invalid withdraw proof"
+    );
+
+    seller_nullifierHashes[_nullifierHash] = true;
+    _processPayment(_recipient, _relayer, _fee, _refund, random_sale_amount);
+    emit Payment(_recipient, _nullifierHash, _relayer, _fee);
+  }
 
   function withdrawNFT(
     bytes calldata _proof,
