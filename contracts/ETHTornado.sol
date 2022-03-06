@@ -36,11 +36,19 @@ contract ETHTornado is Tornado {
     token_IDs[current_deposits] = _tokenID;
     current_deposits = current_deposits + 1;
 
+    if (current_deposits == number_of_sales) {
+      current_phase = Phase.SELLER_PAYMENT;
+    }
+
   }
 
   function _processPurchase() internal override {
     require(msg.value == end_range, "Please send the maximum ETH amount along with transaction");
     current_purchases = current_purchases + 1;
+
+    if (current_purchases == number_of_sales) {
+      current_phase = Phase.BUYER_WITHDRAWAL_REFUND;
+    }
   }
 
   function _processWithdraw(

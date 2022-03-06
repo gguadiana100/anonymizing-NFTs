@@ -89,7 +89,7 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
   function deposit(bytes32 _commitment, uint256 _tokenID) external nonReentrant {
     require(!deposit_commitments[_commitment], "The commitment has been submitted");
     require(current_phase == Phase.SELLER, "Cannot deposit outside of seller phase");
-    require(current_deposits >= number_of_sales, "No more deposits are needed");
+    require(current_deposits <= number_of_sales, "No more deposits are needed");
 
     uint32 insertedIndex = deposit_merkle_tree.insert(_commitment);
     deposit_commitments[_commitment] = true;
@@ -113,7 +113,7 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
   function purchase(bytes32 _commitment, uint256 _tokenID) external payable nonReentrant {
     require(!purchase_commitments[_commitment], "The commitment has been submitted");
     require(current_phase == Phase.BUYER, "Cannot deposit outside of buyer phase");
-    require(current_purchases >= number_of_sales, "No more purchases are needed");
+    require(current_purchases <= number_of_sales, "No more purchases are needed");
 
     uint32 insertedIndex = purchase_merkle_tree.insert(_commitment);
     purchase_commitments[_commitment] = true;
