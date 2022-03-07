@@ -13,7 +13,7 @@
 pragma solidity ^0.7.0;
 
 import "./MerkleTreeWithHistory.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/security/ReentrancyGuard.sol";
 import 'https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC721/ERC721.sol';
 
 interface IVerifier {
@@ -41,7 +41,7 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
   event Deposit(bytes32 indexed commitment, uint32 leafIndex, uint256 timestamp, uint256 _tokenID);
   event Purchase(bytes32 indexed commitment, uint32 leafIndex, uint256 timestamp);
   event WithdrawNFT(address to, bytes32 nullifierHash, uint256 _tokenID);
-  event WithdrawRefund(address to, bytes32 nullifierHash, address indexed relayer, uint256 fee, uint256 random_sale_amount);
+  event WithdrawRefund(address to, bytes32 nullifierHash, address indexed relayer, uint256 fee, uint256 random_sale_amount)
 
   // Define the phases
   enum Phase{SELLER, BUYER, SELLER_PAYMENT, BUYER_WITHDRAWAL_REFUND}
@@ -104,15 +104,15 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
 
 
   function get_random_number(uint256 s, uint256 e) public view returns (uint256) {
-    uint256 pi = 14159265358979323846;
-    uint256 random_looping = pi[random_pi_index % 20];
-    uint256 random_number = 0;
+    uint256 pi = 14159265358979323846
+    uint256 random_looping = pi[random_pi_index % 20]
+    uint256 random_number = 0
     for (uint256 i = 0; i < random_looping; i++) {
-      random_number = random_number + pi[random_pi_index + i] * 10**i;
+      random_number = random_number + pi[random_pi_index + i] * 10**i
     }
-    random_number = random_number % (e-s) + s;
-    random_pi_index = random_pi_index + 1;
-    return random_number;
+    random_number = random_number % (e-s) + s
+    random_pi_index = random_pi_index + 1
+    return random_number
   }
 
   /**
@@ -212,7 +212,7 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
   function withdrawNFT(
     bytes calldata _proof,
     bytes32 _root,
-    bytes32 _nullifierHash,
+    bytes32 _nullifierHash
     address payable _recipient
   ) external payable nonReentrant {
     require(current_phase == Phase.BUYER_WITHDRAWAL_REFUND);
