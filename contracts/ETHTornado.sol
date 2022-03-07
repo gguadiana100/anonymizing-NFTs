@@ -37,7 +37,7 @@ contract ETHTornado is Tornado {
     current_deposits = current_deposits + 1;
 
     if (current_deposits == number_of_sales) {
-      current_phase = Phase.SELLER_PAYMENT;
+      current_phase = Phase.BUYER;
     }
 
   }
@@ -48,7 +48,7 @@ contract ETHTornado is Tornado {
     current_purchases = current_purchases + 1;
 
     if (current_purchases == number_of_sales) {
-      current_phase = Phase.BUYER_WITHDRAWAL_REFUND;
+      current_phase = Phase.SELLER_PAYMENT;
     }
   }
 
@@ -56,7 +56,8 @@ contract ETHTornado is Tornado {
   address payable _recipient,
   address payable _relayer,
   uint256 _fee,
-  uint256 _refund
+  uint256 _refund,
+  uint256 random_sale_amount
 ) internal override {
   // sanity checks
   require(msg.value == 0, "Message value is supposed to be zero for ETH instance");
@@ -68,34 +69,22 @@ contract ETHTornado is Tornado {
     (success, ) = _relayer.call{ value: _fee }("");
     require(success, "payment to _relayer did not go thru");
   }
+
+  current_payments = current_payments + 1;
+
+  if (current_purchases == number_of_sales) {
+    current_phase = Phase.BUYER_WITHDRAWAL_REFUND;
+  }
 }
 
-  function _processWithdraw(
-    address payable _recipient,
-    address payable _relayer,
-    uint256 _fee,
-    uint256 _refund
-  ) internal override {
-    // sanity checks
-    require(msg.value == 0, "Message value is supposed to be zero for ETH instance");
-    require(_refund == 0, "Refund value is supposed to be zero for ETH instance");
-
-    (bool success, ) = _recipient.call{ value: denomination - _fee }("");
-    require(success, "payment to _recipient did not go thru");
-    if (_fee > 0) {
-      (success, ) = _relayer.call{ value: _fee }("");
-      require(success, "payment to _relayer did not go thru");
-    }
-  }
   function _processWithdrawNFT(
     address payable _recipient,
     uint256 _tokenID
   ) internal override {
     // sanity checks
     require(msg.value == 0, "Message value is supposed to be zero for ETH instance");
-    require(current_phase == Phase.BUYER_WITHDRAWAL_REFUND);
-    require(current_NFT_withdraws <= _number_of_sales);
-    require(current_refund_withdraws <= _number_of_sales);
+
+    _transfer(address(this), _recipient, _tokenID);
 
     current_NFT_withdraws = current_NFT_withdraws + 1;
 

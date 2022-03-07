@@ -37,7 +37,7 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
 
   event Deposit(bytes32 indexed commitment, uint32 leafIndex, uint256 timestamp);
   event Purchase(bytes32 indexed commitment, uint32 leafIndex, uint256 timestamp);
-  event Payment(address to, bytes32 nullifierHash, address indexed relayer, uint256 fee);
+  event Payment(address to, bytes32 nullifierHash, address indexed relayer, uint256 fee, uint256 random_sale_amount);
   event Deposit(bytes32 indexed commitment, uint32 leafIndex, uint256 timestamp, uint256 _tokenID);
   event Purchase(bytes32 indexed commitment, uint32 leafIndex, uint256 timestamp);
   event Withdrawal(address to, bytes32 nullifierHash, uint256 _tokenID);
@@ -56,7 +56,7 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
   uint256 public current_payments;
   uint256 public current_NFT_withdraws;
   uint256 public current_refund_withdraws;
-  uint256 public random_index;
+  uint256 public random_pi_index;
   uint256[] public token_IDs;
   uint256[] public sale_amounts;
   MerkleTreeWithHistory public purchase_merkle_tree;
@@ -92,7 +92,7 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
     current_payments = 0;
     current_NFT_withdraws = 0;
     current_refund_withdraws = 0;
-    random_index = 0;
+    random_pi_index = 0;
     token_IDs = new uint256[](_number_of_sales);
     sale_amounts = new uint256[](_number_of_sales);
 
@@ -102,15 +102,15 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
 
 
 
-  function get_random_number(uint256 random_index, uint256 s, uint256 e) public view returns (uint256) {
+  function get_random_number(uint256 s, uint256 e) public view returns (uint256) {
     uint256 pi = 14159265358979323846
-    uint256 random_looping = pi[random_index % 20]
+    uint256 random_looping = pi[random_pi_index % 20]
     uint256 random_number = 0
     for (uint256 i = 0; i < random_looping; i++) {
-      random_number = random_number + pi[random_index + i] * 10**i
+      random_number = random_number + pi[random_pi_index + i] * 10**i
     }
     random_number = random_number % (e-s) + s
-    random_index = random_index + 1
+    random_pi_index = random_pi_index + 1
     return random_number
   }
 
@@ -158,19 +158,15 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
   /** @dev this function is defined in a child contract */
   function _processPurchase() internal virtual;
 
-  uint256 function get_random_number() internal {
-    return 1;
-  }
-
-  uint256 function get_random_sales_amount() internal {
-    uint256 random_index = get_random_number();
-    while(seller_sales_amounts[random_index] != false) {
+  function get_random_value(uint256[] array) internal returns(uint256) {
+    uint256 random_index = get_random_number(0, number_of_sales-1);
+    while(array[random_index]) {
       random_index = random_index + 1;
       if (random_index == number_of_sales) {
         random_index = 0;
       }
     }
-    return sale_amounts[random_index];
+    return array[random_index];
   }
 
   function payment(
@@ -182,8 +178,8 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
     uint256 _fee,
     uint256 _refund
   ) external payable nonReentrant {
-    require
-    uint256 random_sale_amount = get_random_sales_amount();
+    require(current_phase == Phase.SELLER_PAYMENT, "Cannot pay outside of seller payment phase");
+    uint256 random_sale_amount = get_random_value(sale_amounts);
     require(_fee <= random_sales_amount, "Fee exceeds maximum transfer value");
     require(!seller_nullifierHashes[_nullifierHash], "The deposit note has been already spent");
     require(deposit_merkle_tree.isKnownRoot(_root), "Cannot find your merkle root for deposit merkle tree"); // Make sure to use a recent one
@@ -197,19 +193,20 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
 
     seller_nullifierHashes[_nullifierHash] = true;
     _processPayment(_recipient, _relayer, _fee, _refund, random_sale_amount);
-    emit Payment(_recipient, _nullifierHash, _relayer, _fee);
+    emit Payment(_recipient, _nullifierHash, _relayer, _fee, random_sale_amount);
   }
 
   function withdrawNFT(
     bytes calldata _proof,
     bytes32 _root,
-    bytes32 _withdraw_NFT_nullifierHash
+    bytes32 _nullifierHash
     address payable _recipient
   ) external payable nonReentrant {
-
-
-    require(!withdraw_NFT_nullifierHashes[_withdraw_NFT_nullifierHash], "The reciept has been already spent");
-    require(isKnownRoot(_root), "Cannot find your merkle root"); // Make sure to use a recent one
+    require(current_phase == Phase.BUYER_WITHDRAWAL_REFUND);
+    require(current_NFT_withdraws <= _number_of_sales);
+    require(current_refund_withdraws <= _number_of_sales);
+    require(!withdraw_NFT_nullifierHashes[_nullifierHash], "The reciept has been already spent");
+    require(purchase_merkle_tree.isKnownRoot(_root), "Cannot find your merkle root for purchase merkle tree"); // Make sure to use a recent one
     uint256 _relayer = 0;
     uint256 _fee = 0;
     uint256 _refund = 0;
@@ -221,30 +218,22 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
       "Invalid withdraw proof"
     );
 
-    uint256 rand = getRandomNumber();
-    _token = token_IDs[rand];
-    while(!NFT_tokens[_token]) {
-      rand = rand + 1;
-      if (rand == _number_of_sales) {
-        rand = 0;
-      }
-      _token = token_IDs[rand];
-    }
+    // uint256 rand = getRandomNumber();
+    // _token = token_IDs[rand];
+    // while(NFT_tokens[_token]) {
+    //   rand = rand + 1;
+    //   if (rand == _number_of_sales) {
+    //     rand = 0;
+    //   }
+    //   _token = token_IDs[rand];
+    // }
 
-    _transfer(address(this), _recipient, _token);
+    uint256 random_token_ID = get_random_value(token_IDs);
 
-    nullifierHashes[_nullifierHash] = true;
+    withdraw_NFT_nullifierHashes[_nullifierHash] = true;
     _processWithdraw(_recipient, _token);
     emit Withdrawal(_recipient, _nullifierHash, _token);
   }
-
-  /** @dev this function is defined in a child contract */
-  function _processWithdraw(
-    address payable _recipient,
-    address payable _relayer,
-    uint256 _fee,
-    uint256 _refund
-  ) internal virtual;
 
   /** @dev whether a note is already spent */
   function isSpent(bytes32 _nullifierHash) public view returns (bool) {
