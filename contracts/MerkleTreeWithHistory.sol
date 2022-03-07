@@ -10,9 +10,9 @@
  */
 
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.7.0;
+pragma solidity ^0.8.0;
 
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/access/Ownable.sol";
+import "./Ownable.sol";
 
 interface IHasher {
   function MiMCSponge(uint256 in_xL, uint256 in_xR) external pure returns (uint256 xL, uint256 xR);
@@ -67,7 +67,7 @@ contract MerkleTreeWithHistory is Ownable {
     return bytes32(R);
   }
 
-  function insert(bytes32 _leaf) onlyOwner returns (uint32 index) {
+  function insert(bytes32 _leaf) public onlyOwner returns (uint32 index) {
     uint32 _nextIndex = nextIndex;
     require(_nextIndex != uint32(2)**levels, "Merkle tree is full. No more leaves can be added");
     uint32 currentIndex = _nextIndex;

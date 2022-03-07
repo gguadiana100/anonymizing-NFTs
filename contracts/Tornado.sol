@@ -10,17 +10,14 @@
  */
 
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.1;
+pragma solidity ^0.8.0;
 
 import "./MerkleTreeWithHistory.sol";
 import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/security/ReentrancyGuard.sol";
 
-
 interface IVerifier {
   function verifyProof(bytes memory _proof, uint256[6] memory _input) external returns (bool);
 }
-
-
 
 abstract contract Tornado is ReentrancyGuard{
   IVerifier public immutable verifier;
@@ -63,6 +60,7 @@ abstract contract Tornado is ReentrancyGuard{
   uint256[] public sale_amounts;
   MerkleTreeWithHistory public purchase_merkle_tree;
   MerkleTreeWithHistory public deposit_merkle_tree;
+  SimpleCollectible public nft_contract;
 
   /**
     @dev The constructor
@@ -100,6 +98,7 @@ abstract contract Tornado is ReentrancyGuard{
 
     purchase_merkle_tree = new MerkleTreeWithHistory(_merkleTreeHeight, _hasher);
     deposit_merkle_tree = new MerkleTreeWithHistory(_merkleTreeHeight, _hasher);
+    nft_contract = new SimpleCollectible();
   }
 
 

@@ -10,18 +10,9 @@
  */
 
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.1;
+pragma solidity ^0.8.0;
 
 import "./Tornado.sol";
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC721/IERC721.sol";
-
-interface IERC721 {
-    function transferFrom(
-        address _from,
-        address _to,
-        uint256 _nftId
-    ) external;
-}
 
 contract ETHTornado is Tornado {
   constructor(
@@ -39,7 +30,7 @@ contract ETHTornado is Tornado {
     // require(msg.value == denomination, "Please send `mixDenomination` ETH along with transaction");
 
     // transfer NFT to this smart contract
-    this.transferFrom(msg.sender, address(this), _tokenID);
+    nft_contract.transferFrom(msg.sender, address(this), _tokenID);
 
     // add tokenID to array and update current deposits count
     token_IDs[current_deposits] = _tokenID;
@@ -94,7 +85,7 @@ contract ETHTornado is Tornado {
     // sanity checks
     require(msg.value == 0, "Message value is supposed to be zero for ETH instance");
 
-    this.transferFrom(address(this), _recipient, _tokenID);
+    nft_contract.transferFrom(address(this), _recipient, _tokenID);
 
     current_NFT_withdraws = current_NFT_withdraws + 1;
 
