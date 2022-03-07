@@ -15,7 +15,7 @@ pragma solidity ^0.8.0;
  * `onlyOwner`, which can be applied to your functions to restrict their use to
  * the owner.
  */
-import "./simpleMinter.sol";
+import "./SimpleCollectible.sol";
 
 abstract contract Ownable is Context {
     address private _owner;

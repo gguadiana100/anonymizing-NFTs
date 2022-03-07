@@ -9,4 +9,11 @@ contract SimpleCollectible is ERC721 {
         tokenCounter = 0;
     }
 
+    function createCollectible() public returns (uint256) {
+        uint256 newItemId = tokenCounter;
+        _safeMint(msg.sender, newItemId);
+        tokenCounter = tokenCounter + 1;
+        return newItemId;
+    }
+
 }
