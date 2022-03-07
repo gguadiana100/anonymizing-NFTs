@@ -10,17 +10,19 @@
  */
 
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.7.0;
+pragma solidity ^0.8.1;
 
 import "./MerkleTreeWithHistory.sol";
 import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/security/ReentrancyGuard.sol";
-import 'https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC721/ERC721.sol';
+
 
 interface IVerifier {
   function verifyProof(bytes memory _proof, uint256[6] memory _input) external returns (bool);
 }
 
-abstract contract Tornado is ReentrancyGuard, ERC721{
+
+
+abstract contract Tornado is ReentrancyGuard{
   IVerifier public immutable verifier;
   uint256 public denomination;
 
@@ -39,9 +41,8 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
   event Purchase(bytes32 indexed commitment, uint32 leafIndex, uint256 timestamp);
   event Payment(address to, bytes32 nullifierHash, address indexed relayer, uint256 fee, uint256 random_sale_amount);
   event Deposit(bytes32 indexed commitment, uint32 leafIndex, uint256 timestamp, uint256 _tokenID);
-  event Purchase(bytes32 indexed commitment, uint32 leafIndex, uint256 timestamp);
   event WithdrawNFT(address to, bytes32 nullifierHash, uint256 _tokenID);
-  event WithdrawRefund(address to, bytes32 nullifierHash, address indexed relayer, uint256 fee, uint256 random_sale_amount)
+  event WithdrawRefund(address to, bytes32 nullifierHash, address indexed relayer, uint256 fee, uint256 random_sale_amount);
 
   // Define the phases
   enum Phase{SELLER, BUYER, SELLER_PAYMENT, BUYER_WITHDRAWAL_REFUND}
@@ -93,7 +94,7 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
     current_payments = 0;
     current_NFT_withdraws = 0;
     current_refund_withdraws = 0;
-    random_pi_index = 0;
+    random_pi_index = 7;
     token_IDs = new uint256[](_number_of_sales);
     sale_amounts = new uint256[](_number_of_sales);
 
@@ -103,16 +104,16 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
 
 
 
-  function get_random_number(uint256 s, uint256 e) public view returns (uint256) {
-    uint256 pi = 14159265358979323846
-    uint256 random_looping = pi[random_pi_index % 20]
-    uint256 random_number = 0
+  function get_random_number(uint256 s, uint256 e) public returns (uint256) {
+    uint8[20] memory pi = [1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3, 2, 3, 8, 4, 6];
+    uint256 random_looping = pi[random_pi_index % 20];
+    uint256 random_number = 0;
     for (uint256 i = 0; i < random_looping; i++) {
-      random_number = random_number + pi[random_pi_index + i] * 10**i
+      random_number = random_number + pi[random_pi_index + i] * (10**i);
     }
-    random_number = random_number % (e-s) + s
-    random_pi_index = random_pi_index + 1
-    return random_number
+    random_number = random_number % (e-s) + s;
+    random_pi_index = random_pi_index + 1;
+    return random_number;
   }
 
   /**
@@ -149,7 +150,7 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
   function _processPurchase() internal virtual;
 
 
-  function purchase(bytes32 _commitment, uint256 _tokenID) external payable nonReentrant {
+  function purchase(bytes32 _commitment) external payable nonReentrant {
     require(!purchase_commitments[_commitment], "The commitment has been submitted");
     require(current_phase == Phase.BUYER, "Cannot deposit outside of buyer phase");
     require(current_purchases <= number_of_sales, "No more purchases are needed");
@@ -161,16 +162,7 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
     emit Purchase(_commitment, insertedIndex, block.timestamp);
   }
 
-  function get_random_value(uint256[] array) internal returns(uint256) {
-    uint256 random_index = get_random_number(0, number_of_sales-1);
-    while(array[random_index]) {
-      random_index = random_index + 1;
-      if (random_index == number_of_sales) {
-        random_index = 0;
-      }
-    }
-    return array[random_index];
-  }
+
 
   /** @dev this function is defined in a child contract */
   function _processPayment(address payable _recipient,
@@ -189,14 +181,21 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
     uint256 _refund
   ) external payable nonReentrant {
     require(current_phase == Phase.SELLER_PAYMENT, "Cannot pay outside of seller payment phase");
-    uint256 random_sale_amount = get_random_value(sale_amounts);
+    uint256 random_index = get_random_number(0, number_of_sales-1);
+    while(seller_sales_amounts[random_index]) {
+      random_index = random_index + 1;
+      if (random_index == number_of_sales) {
+        random_index = 0;
+      }
+    }
+    uint256 random_sale_amount = sale_amounts[random_index];
     require(_fee <= random_sale_amount, "Fee exceeds maximum transfer value");
     require(!seller_nullifierHashes[_nullifierHash], "The deposit note has been already spent");
     require(deposit_merkle_tree.isKnownRoot(_root), "Cannot find your merkle root for deposit merkle tree"); // Make sure to use a recent one
     require(
       verifier.verifyProof(
         _proof,
-        [uint256(_root), uint256(_nullifierHash), uint256(_recipient), uint256(_relayer), _fee, _refund]
+        [uint256(_root), uint256(_nullifierHash), uint256(uint160(address(_recipient))), uint256(uint160(address(_relayer))), _fee, _refund]
       ),
       "Invalid withdraw proof"
     );
@@ -212,11 +211,11 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
   function withdrawNFT(
     bytes calldata _proof,
     bytes32 _root,
-    bytes32 _nullifierHash
+    bytes32 _nullifierHash,
     address payable _recipient
   ) external payable nonReentrant {
     require(current_phase == Phase.BUYER_WITHDRAWAL_REFUND);
-    require(current_NFT_withdraws <= _number_of_sales);
+    require(current_NFT_withdraws <= number_of_sales);
     require(!withdraw_NFT_nullifierHashes[_nullifierHash], "The reciept has been already spent");
     require(purchase_merkle_tree.isKnownRoot(_root), "Cannot find your merkle root for purchase merkle tree"); // Make sure to use a recent one
     uint256 _relayer = 0;
@@ -225,15 +224,22 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
     require(
       verifier.verifyProof(
         _proof,
-        [uint256(_root), uint256(_nullifierHash), uint256(_recipient), uint256(_relayer), _fee, _refund]
+        [uint256(_root), uint256(_nullifierHash), uint256(uint160(address(_recipient))), uint256(_relayer), uint256(_fee), uint256(_refund)]
       ),
       "Invalid withdraw proof"
     );
 
-    uint256 _token = get_random_value(token_IDs);
+    uint256 random_index = get_random_number(0, number_of_sales-1);
+    while(NFT_tokens[random_index]) {
+      random_index = random_index + 1;
+      if (random_index == number_of_sales) {
+        random_index = 0;
+      }
+    }
+    uint256 _token = token_IDs[random_index];
 
     withdraw_NFT_nullifierHashes[_nullifierHash] = true;
-    _processWithdraw(_recipient, _token);
+    _processWithdrawNFT(_recipient, _token);
     emit WithdrawNFT(_recipient, _nullifierHash, _token);
   }
 
@@ -254,15 +260,23 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
     uint256 _refund
   ) external payable nonReentrant {
     require(current_phase == Phase.BUYER_WITHDRAWAL_REFUND, "Cannot pay outside of buyer withdrawal refund phase");
-    uint256 random_sale_amount = get_random_value(sale_amounts);
-    require(current_refund_withdraws <= _number_of_sales);
+    uint256 random_index = get_random_number(0, number_of_sales-1);
+    while(buyer_sales_amounts[random_index]) {
+      random_index = random_index + 1;
+      if (random_index == number_of_sales) {
+        random_index = 0;
+      }
+    }
+    uint256 random_sale_amount = sale_amounts[random_index];
+
+    require(current_refund_withdraws <= number_of_sales);
     require(_fee <= (end_range - random_sale_amount), "Fee exceeds maximum transfer value");
     require(!withdraw_refund_nullifierHashes[_nullifierHash], "The deposit note has been already spent");
     require(purchase_merkle_tree.isKnownRoot(_root), "Cannot find your merkle root for deposit merkle tree"); // Make sure to use a recent one
     require(
       verifier.verifyProof(
         _proof,
-        [uint256(_root), uint256(_nullifierHash), uint256(_recipient), uint256(_relayer), _fee, _refund]
+        [uint256(_root), uint256(_nullifierHash), uint256(uint160(address(_recipient))), uint256(uint160(address(_relayer))), _fee, _refund]
       ),
       "Invalid withdraw proof"
     );

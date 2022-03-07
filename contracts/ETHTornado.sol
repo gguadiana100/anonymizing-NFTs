@@ -10,9 +10,18 @@
  */
 
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.7.0;
+pragma solidity ^0.8.1;
 
 import "./Tornado.sol";
+import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC721/IERC721.sol";
+
+interface IERC721 {
+    function transferFrom(
+        address _from,
+        address _to,
+        uint256 _nftId
+    ) external;
+}
 
 contract ETHTornado is Tornado {
   constructor(
@@ -30,7 +39,7 @@ contract ETHTornado is Tornado {
     // require(msg.value == denomination, "Please send `mixDenomination` ETH along with transaction");
 
     // transfer NFT to this smart contract
-    _transfer(msg.sender, address(this), _tokenID);
+    this.transferFrom(msg.sender, address(this), _tokenID);
 
     // add tokenID to array and update current deposits count
     token_IDs[current_deposits] = _tokenID;
@@ -43,7 +52,7 @@ contract ETHTornado is Tornado {
   }
 
   function _processPurchase() internal override {
-    require(current_phase == BUYER);
+    require(current_phase == Phase.BUYER);
     require(msg.value == end_range, "Please send the maximum ETH amount along with transaction");
     sale_amounts[current_purchases] = get_random_number(start_range, end_range);
     current_purchases = current_purchases + 1;
@@ -85,11 +94,11 @@ contract ETHTornado is Tornado {
     // sanity checks
     require(msg.value == 0, "Message value is supposed to be zero for ETH instance");
 
-    _transfer(address(this), _recipient, _tokenID);
+    this.transferFrom(address(this), _recipient, _tokenID);
 
     current_NFT_withdraws = current_NFT_withdraws + 1;
 
-    if (current_NFT_withdraws == _number_of_sales && current_refund_withdraws == _number_of_sales) {
+    if (current_NFT_withdraws == number_of_sales && current_refund_withdraws == number_of_sales) {
       current_phase = Phase.SELLER;
     }
 
@@ -116,7 +125,7 @@ contract ETHTornado is Tornado {
 
   current_refund_withdraws = current_refund_withdraws + 1;
 
-  if (current_NFT_withdraws == _number_of_sales && current_refund_withdraws == _number_of_sales) {
+  if (current_NFT_withdraws == number_of_sales && current_refund_withdraws == number_of_sales) {
     current_phase = Phase.SELLER;
   }
 }
