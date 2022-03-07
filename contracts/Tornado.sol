@@ -40,7 +40,8 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
   event Payment(address to, bytes32 nullifierHash, address indexed relayer, uint256 fee, uint256 random_sale_amount);
   event Deposit(bytes32 indexed commitment, uint32 leafIndex, uint256 timestamp, uint256 _tokenID);
   event Purchase(bytes32 indexed commitment, uint32 leafIndex, uint256 timestamp);
-  event Withdrawal(address to, bytes32 nullifierHash, uint256 _tokenID);
+  event WithdrawNFT(address to, bytes32 nullifierHash, uint256 _tokenID);
+  event WithdrawRefund(address to, bytes32 nullifierHash, address indexed relayer, uint256 fee, uint256 random_sale_amount)
 
   // Define the phases
   enum Phase{SELLER, BUYER, SELLER_PAYMENT, BUYER_WITHDRAWAL_REFUND}
@@ -143,6 +144,11 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
       - the recipient of funds
       - optional fee that goes to the transaction sender (usually a relay)
   */
+
+  /** @dev this function is defined in a child contract */
+  function _processPurchase() internal virtual;
+
+
   function purchase(bytes32 _commitment, uint256 _tokenID) external payable nonReentrant {
     require(!purchase_commitments[_commitment], "The commitment has been submitted");
     require(current_phase == Phase.BUYER, "Cannot deposit outside of buyer phase");
@@ -155,9 +161,6 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
     emit Purchase(_commitment, insertedIndex, block.timestamp);
   }
 
-  /** @dev this function is defined in a child contract */
-  function _processPurchase() internal virtual;
-
   function get_random_value(uint256[] array) internal returns(uint256) {
     uint256 random_index = get_random_number(0, number_of_sales-1);
     while(array[random_index]) {
@@ -168,6 +171,13 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
     }
     return array[random_index];
   }
+
+  /** @dev this function is defined in a child contract */
+  function _processPayment(address payable _recipient,
+  address payable _relayer,
+  uint256 _fee,
+  uint256 _refund,
+  uint256 random_sale_amount) internal virtual;
 
   function payment(
     bytes calldata _proof,
@@ -180,7 +190,7 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
   ) external payable nonReentrant {
     require(current_phase == Phase.SELLER_PAYMENT, "Cannot pay outside of seller payment phase");
     uint256 random_sale_amount = get_random_value(sale_amounts);
-    require(_fee <= random_sales_amount, "Fee exceeds maximum transfer value");
+    require(_fee <= random_sale_amount, "Fee exceeds maximum transfer value");
     require(!seller_nullifierHashes[_nullifierHash], "The deposit note has been already spent");
     require(deposit_merkle_tree.isKnownRoot(_root), "Cannot find your merkle root for deposit merkle tree"); // Make sure to use a recent one
     require(
@@ -196,6 +206,9 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
     emit Payment(_recipient, _nullifierHash, _relayer, _fee, random_sale_amount);
   }
 
+  /** @dev this function is defined in a child contract */
+  function _processWithdrawNFT(address payable _recipient, uint256 _tokenID) internal virtual;
+
   function withdrawNFT(
     bytes calldata _proof,
     bytes32 _root,
@@ -204,7 +217,6 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
   ) external payable nonReentrant {
     require(current_phase == Phase.BUYER_WITHDRAWAL_REFUND);
     require(current_NFT_withdraws <= _number_of_sales);
-    require(current_refund_withdraws <= _number_of_sales);
     require(!withdraw_NFT_nullifierHashes[_nullifierHash], "The reciept has been already spent");
     require(purchase_merkle_tree.isKnownRoot(_root), "Cannot find your merkle root for purchase merkle tree"); // Make sure to use a recent one
     uint256 _relayer = 0;
@@ -218,35 +230,61 @@ abstract contract Tornado is ReentrancyGuard, ERC721{
       "Invalid withdraw proof"
     );
 
-    // uint256 rand = getRandomNumber();
-    // _token = token_IDs[rand];
-    // while(NFT_tokens[_token]) {
-    //   rand = rand + 1;
-    //   if (rand == _number_of_sales) {
-    //     rand = 0;
-    //   }
-    //   _token = token_IDs[rand];
-    // }
-
-    uint256 random_token_ID = get_random_value(token_IDs);
+    uint256 _token = get_random_value(token_IDs);
 
     withdraw_NFT_nullifierHashes[_nullifierHash] = true;
     _processWithdraw(_recipient, _token);
-    emit Withdrawal(_recipient, _nullifierHash, _token);
+    emit WithdrawNFT(_recipient, _nullifierHash, _token);
   }
 
-  /** @dev whether a note is already spent */
-  function isSpent(bytes32 _nullifierHash) public view returns (bool) {
-    return nullifierHashes[_nullifierHash];
+  /** @dev this function is defined in a child contract */
+  function _processWithdrawRefund(address payable _recipient,
+  address payable _relayer,
+  uint256 _fee,
+  uint256 _refund,
+  uint256 random_sale_amount) internal virtual;
+
+  function withdrawRefund(
+    bytes calldata _proof,
+    bytes32 _root,
+    bytes32 _nullifierHash,
+    address payable _recipient,
+    address payable _relayer,
+    uint256 _fee,
+    uint256 _refund
+  ) external payable nonReentrant {
+    require(current_phase == Phase.BUYER_WITHDRAWAL_REFUND, "Cannot pay outside of buyer withdrawal refund phase");
+    uint256 random_sale_amount = get_random_value(sale_amounts);
+    require(current_refund_withdraws <= _number_of_sales);
+    require(_fee <= (end_range - random_sale_amount), "Fee exceeds maximum transfer value");
+    require(!withdraw_refund_nullifierHashes[_nullifierHash], "The deposit note has been already spent");
+    require(purchase_merkle_tree.isKnownRoot(_root), "Cannot find your merkle root for deposit merkle tree"); // Make sure to use a recent one
+    require(
+      verifier.verifyProof(
+        _proof,
+        [uint256(_root), uint256(_nullifierHash), uint256(_recipient), uint256(_relayer), _fee, _refund]
+      ),
+      "Invalid withdraw proof"
+    );
+
+    withdraw_refund_nullifierHashes[_nullifierHash] = true;
+    _processWithdrawRefund(_recipient, _relayer, _fee, _refund, random_sale_amount);
+    emit WithdrawRefund(_recipient, _nullifierHash, _relayer, _fee, random_sale_amount);
   }
 
-  /** @dev whether an array of notes is already spent */
-  function isSpentArray(bytes32[] calldata _nullifierHashes) external view returns (bool[] memory spent) {
-    spent = new bool[](_nullifierHashes.length);
-    for (uint256 i = 0; i < _nullifierHashes.length; i++) {
-      if (isSpent(_nullifierHashes[i])) {
-        spent[i] = true;
-      }
-    }
-  }
+
+  // /** @dev whether a note is already spent */
+  // function isSpent(bytes32 _nullifierHash) public view returns (bool) {
+  //   return nullifierHashes[_nullifierHash];
+  // }
+  //
+  // /** @dev whether an array of notes is already spent */
+  // function isSpentArray(bytes32[] calldata _nullifierHashes) external view returns (bool[] memory spent) {
+  //   spent = new bool[](_nullifierHashes.length);
+  //   for (uint256 i = 0; i < _nullifierHashes.length; i++) {
+  //     if (isSpent(_nullifierHashes[i])) {
+  //       spent[i] = true;
+  //     }
+  //   }
+  // }
 }

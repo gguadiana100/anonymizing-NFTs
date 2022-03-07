@@ -45,6 +45,7 @@ contract ETHTornado is Tornado {
   function _processPurchase() internal override {
     require(current_phase == BUYER);
     require(msg.value == end_range, "Please send the maximum ETH amount along with transaction");
+    sale_amounts[current_purchases] = get_random_number(start_range, end_range);
     current_purchases = current_purchases + 1;
 
     if (current_purchases == number_of_sales) {
@@ -89,9 +90,34 @@ contract ETHTornado is Tornado {
     current_NFT_withdraws = current_NFT_withdraws + 1;
 
     if (current_NFT_withdraws == _number_of_sales && current_refund_withdraws == _number_of_sales) {
-      current_phase == Phase.SELLER;
+      current_phase = Phase.SELLER;
     }
 
 
   }
+
+  function _processWithdrawRefund(
+  address payable _recipient,
+  address payable _relayer,
+  uint256 _fee,
+  uint256 _refund,
+  uint256 random_sale_amount
+) internal override {
+  // sanity checks
+  require(msg.value == 0, "Message value is supposed to be zero for ETH instance");
+  require(_refund == 0, "Refund value is supposed to be zero for ETH instance");
+
+  (bool success, ) = _recipient.call{ value: end_range - random_sale_amount - _fee }("");
+  require(success, "payment to _recipient did not go thru");
+  if (_fee > 0) {
+    (success, ) = _relayer.call{ value: _fee }("");
+    require(success, "payment to _relayer did not go thru");
+  }
+
+  current_refund_withdraws = current_refund_withdraws + 1;
+
+  if (current_NFT_withdraws == _number_of_sales && current_refund_withdraws == _number_of_sales) {
+    current_phase = Phase.SELLER;
+  }
+}
 }
