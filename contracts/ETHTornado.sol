@@ -29,6 +29,7 @@ contract ETHTornado is Tornado {
   function _processDeposit(uint256 _tokenID, ERC721 _contractAddress) internal override {
     // require(msg.value == denomination, "Please send `mixDenomination` ETH along with transaction");
 
+    _contractAddress.approve(address(this), _tokenID);
     // transfer NFT to this smart contract
     _contractAddress.transferFrom(msg.sender, address(this), _tokenID);
 
@@ -80,12 +81,15 @@ contract ETHTornado is Tornado {
 
   function _processWithdrawNFT(
     address payable _recipient,
-    uint256 _tokenID
+    uint256 _tokenID,
+    ERC721 _contractAddress
   ) internal override {
     // sanity checks
     require(msg.value == 0, "Message value is supposed to be zero for ETH instance");
 
-    nft_contract.transferFrom(address(this), _recipient, _tokenID);
+    _contractAddress.approve(address(this), _tokenID);
+
+    _contractAddress.transferFrom(address(this), _recipient, _tokenID);
 
     current_NFT_withdraws = current_NFT_withdraws + 1;
 

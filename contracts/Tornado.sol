@@ -205,13 +205,14 @@ abstract contract Tornado is ReentrancyGuard{
   }
 
   /** @dev this function is defined in a child contract */
-  function _processWithdrawNFT(address payable _recipient, uint256 _tokenID) internal virtual;
+  function _processWithdrawNFT(address payable _recipient, uint256 _tokenID, ERC721 _contractAddress) internal virtual;
 
   function withdrawNFT(
     bytes calldata _proof,
     bytes32 _root,
     bytes32 _nullifierHash,
-    address payable _recipient
+    address payable _recipient,
+    ERC721 _contractAddress
   ) external payable nonReentrant {
     require(current_phase == Phase.BUYER_WITHDRAWAL_REFUND);
     require(current_NFT_withdraws <= number_of_sales);
@@ -238,7 +239,7 @@ abstract contract Tornado is ReentrancyGuard{
     uint256 _token = token_IDs[random_index];
 
     withdraw_NFT_nullifierHashes[_nullifierHash] = true;
-    _processWithdrawNFT(_recipient, _token);
+    _processWithdrawNFT(_recipient, _token, _contractAddress);
     emit WithdrawNFT(_recipient, _nullifierHash, _token);
   }
 
