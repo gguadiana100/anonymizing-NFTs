@@ -26,11 +26,11 @@ contract ETHTornado is Tornado {
   ) Tornado(_verifier, _hasher, _denomination, _merkleTreeHeight,
     _start_range, _end_range, _number_of_sales) {}
 
-  function _processDeposit(uint256 _tokenID) internal override {
+  function _processDeposit(uint256 _tokenID, ERC721 _contractAddress) internal override {
     // require(msg.value == denomination, "Please send `mixDenomination` ETH along with transaction");
 
     // transfer NFT to this smart contract
-    nft_contract.transferFrom(msg.sender, address(this), _tokenID);
+    _contractAddress.transferFrom(msg.sender, address(this), _tokenID);
 
     // add tokenID to array and update current deposits count
     token_IDs[current_deposits] = _tokenID;

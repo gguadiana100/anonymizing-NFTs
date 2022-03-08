@@ -120,7 +120,7 @@ abstract contract Tornado is ReentrancyGuard{
     @param _commitment the note commitment, which is PedersenHash(nullifier + secret)
   */
 
-  function deposit(bytes32 _commitment, uint256 _tokenID) external nonReentrant {
+  function deposit(bytes32 _commitment, uint256 _tokenID, ERC721 _contractAddress) external nonReentrant {
     require(!deposit_commitments[_commitment], "The commitment has been submitted");
     require(current_phase == Phase.SELLER, "Cannot deposit outside of seller phase");
     require(current_deposits <= number_of_sales, "No more deposits are needed");
@@ -128,13 +128,13 @@ abstract contract Tornado is ReentrancyGuard{
     uint32 insertedIndex = deposit_merkle_tree.insert(_commitment);
     deposit_commitments[_commitment] = true;
 
-    _processDeposit(_tokenID);
+    _processDeposit(_tokenID, _contractAddress);
 
     emit Deposit(_commitment, insertedIndex, block.timestamp, _tokenID);
   }
 
   /** @dev this function is defined in a child contract */
-  function _processDeposit(uint256 _tokenID) internal virtual;
+  function _processDeposit(uint256 _tokenID, ERC721 _contractAddress) internal virtual;
 
   /**
     @dev Withdraw a deposit from the contract. `proof` is a zkSNARK proof data, and input is an array of circuit public inputs
